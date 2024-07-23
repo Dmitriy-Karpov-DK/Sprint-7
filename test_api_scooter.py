@@ -3,6 +3,7 @@ import pytest
 import allure
 from constants import Constants
 from method_api_scooter import MethodApi
+from data_modules import DataResponse, Data
 
 
 @allure.description('Тесты на ручку POST/api/v1/courier')
@@ -27,7 +28,7 @@ class TestCreateCourier:
         assert response.status_code == 201
         response = MethodApi.create_courier(self, login, password, first_name)
         assert response.status_code == 409
-        assert "Этот логин уже используется" in response.json()['message']
+        assert DataResponse.data_response_login_already_in_use in response.json()['message']
         MethodApi.delete_courier(self, login, password)
 
     @allure.title('Проверим что создание курьера возможно только при заполнении обязательных полей')
@@ -37,11 +38,11 @@ class TestCreateCourier:
         response = requests.post(Constants.URL_CREATE_COURIER, data={"login": "", "password": password})
         assert response.status_code == 400
         res = response.json()
-        assert res["message"] == "Недостаточно данных для создания учетной записи"
+        assert res["message"] == DataResponse.data_response_not_data_to_create
         response = requests.post(Constants.URL_CREATE_COURIER, data={"login": login, "password": ""})
         assert response.status_code == 400
         res = response.json()
-        assert res["message"] == "Недостаточно данных для создания учетной записи"
+        assert res["message"] == DataResponse.data_response_not_data_to_create
 
 
 @allure.description('Тесты на ручку POST/api/v1/courier/login')
@@ -59,57 +60,42 @@ class TestLoginCourier:
         MethodApi.delete_courier(self, login, password)
 
     @allure.title('Проверим что курьер может авторизоваться только при заполнении обязательных полей')
-    def test_login_courier_no_required_fields_show_error(self):
+    @pytest.mark.parametrize('logintest, passwordtest', [["", Constants.PASSWORD], [Constants.LOGIN, ""]])
+    def test_login_courier_no_required_fields_show_error(self, logintest, passwordtest):
         login = Constants.LOGIN
         password = Constants.PASSWORD
         first_name = Constants.FIRSTNAME
         MethodApi.create_courier(self, login, password, first_name)
-        response = requests.post(Constants.URL_LOGIN_COURIER, data={"login": "", "password": password})
+        response = requests.post(Constants.URL_LOGIN_COURIER, data={"login": logintest, "password": passwordtest})
         assert response.status_code == 400
         res = response.json()
-        assert res["message"] == "Недостаточно данных для входа"
-        response = requests.post(Constants.URL_LOGIN_COURIER, data={"login": login, "password": ""})
-        assert response.status_code == 400
-        res = response.json()
-        assert res["message"] == "Недостаточно данных для входа"
+        assert res["message"] == DataResponse.data_response_not_data_log_in
         MethodApi.delete_courier(self, login, password)
 
     @allure.title('Проверим что авторизация не возможна при неправильном логине или пароле')
-    def test_login_courier_invalid_password_or_login_show_error(self):
+    @pytest.mark.parametrize('logintest, passwordtest', [["fake", Constants.PASSWORD], [Constants.LOGIN, "0001"]])
+    def test_login_courier_invalid_password_or_login_show_error(self, logintest, passwordtest):
         login = Constants.LOGIN
         password = Constants.PASSWORD
         first_name = Constants.FIRSTNAME
         MethodApi.create_courier(self, login, password, first_name)
         response = requests.post(Constants.URL_LOGIN_COURIER, json={
-            'login': Constants.LOGIN, 'password': "0001"})
+            'login': logintest, 'password': passwordtest})
         assert response.status_code == 404
-        assert response.json()["message"] == "Учетная запись не найдена"
-        response = requests.post(Constants.URL_LOGIN_COURIER, json={
-            'login': "fake", 'password': Constants.PASSWORD})
-        assert response.status_code == 404
-        assert response.json()["message"] == "Учетная запись не найдена"
+        assert response.json()["message"] == DataResponse.data_response_account_not_found
         MethodApi.delete_courier(self, login, password)
 
 
 @allure.description('тесты на ручку POST/api/v1/orders')
 class TestCreateOrder:
 
-    data_color = [["BLACK"], ["GREY"], [""], ["BLACK", "GREY"]]
 
     @allure.title('Проверим правильность заказа при выборе цвета самоката')
-    @pytest.mark.parametrize('colors', data_color)
+    @pytest.mark.parametrize('colors', [["BLACK"], ["GREY"], [""], ["BLACK", "GREY"]])
     def test_choose_color_scooter_create_order_successful(self, colors):
-        data_order = {
-            "firstName": "Наруто",
-            "lastName": "Наруто",
-            "address": "Коноха, 142 апт.",
-            "metroStation": "10",
-            "phone": "+79999999999",
-            "rentTime": 1,
-            "deliveryDate": "2024-07-22",
-            "comment": "Саске, возвращайся в Коноху",
-            "color": colors
-        }
+        data_order = Data.data_order
+        data_order["color"] = colors
+
         response = requests.post(Constants.URL_CREATE_ORDER, json=data_order)
         assert response.status_code == 201
         assert 'track' in response.json()
@@ -137,4 +123,4 @@ class TestDeleteCourier:
         assert response.status_code == 200
         assert response.json() == {'ok': True}
         res = MethodApi.auth_courier(self, login, password)
-        assert res.json()["message"] == "Учетная запись не найдена"
+        assert res.json()["message"] == DataResponse.data_response_account_not_found
